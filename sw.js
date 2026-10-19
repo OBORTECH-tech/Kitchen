@@ -1,6 +1,6 @@
 // Offline copy of the app. Pages: newest from the network when it answers within 3 s, else the saved copy.
 // Icons, manifest and fonts: saved copy first. A new version name clears the old copy.
-const C = 'kitchen-a5f7a1ad15';
+const C = 'kitchen-02fab2c911';
 const CORE = ['./', './index.html', './manifest.json', './icon-192.png', './apple-touch-icon.png'];
 self.addEventListener('install', e => { e.waitUntil(caches.open(C).then(c => c.addAll(CORE)).then(() => self.skipWaiting())); });
 self.addEventListener('activate', e => { e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k !== C).map(k => caches.delete(k)))).then(() => self.clients.claim())); });
@@ -8,6 +8,7 @@ const keep = (req, res) => { if (res && (res.ok || res.type === 'opaque')) { con
 self.addEventListener('fetch', e => {
   const r = e.request; if (r.method !== 'GET') return;
   const u = new URL(r.url);
+  if (u.pathname.endsWith('/access.txt')) return;  // the admin's list: always from the network, never saved
   if (r.mode === 'navigate') {
     const net = fetch(r).then(res => keep('./index.html', res));
     const slow = new Promise(ok => setTimeout(ok, 3000)).then(() => caches.match('./index.html'));
