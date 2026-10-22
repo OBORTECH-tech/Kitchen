@@ -1,6 +1,6 @@
 // Offline copy of the app. Pages: newest from the network when it answers within 3 s, else the saved copy.
 // Icons, manifest and fonts: saved copy first. A new version name clears the old copy.
-const C = 'kitchen-f3fb3fbbe9';
+const C = 'kitchen-3c0acb3e3c';
 const CORE = ['./', './index.html', './manifest.json', './icon-192.png', './apple-touch-icon.png'];
 self.addEventListener('install', e => { e.waitUntil(caches.open(C).then(c => c.addAll(CORE)).then(() => self.skipWaiting())); });
 self.addEventListener('activate', e => { e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k !== C).map(k => caches.delete(k)))).then(() => self.clients.claim())); });
