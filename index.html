@@ -3596,6 +3596,7 @@ function draw() {
   lastKey = key; lastDrawDay = today();
   PAGE = p.code || id;
   syncHistory(); syncClock(); if ($('scq')) scanFilter(); fqFilter(); a4Fit();
+  if (UPD.to) setTimeout(updMaybe, 0);
   const y = ph.querySelector('.sheet .btn.yes'); if (y) y.focus();
 }
 /* the cooking clock and the serving countdown count seconds, only while they are on the screen */
@@ -3873,6 +3874,40 @@ Object.assign(A, {
 });
 
 
+/* ---------------------------------------------------------------- updates (GitHub copy only)
+   The phone looks for a newer version when the app comes back to the screen and every 30 minutes while it is open. The offline
+   file (sw.js) fetches it in the background and tells the open app; the app switches to it at a quiet moment, without asking:
+   when it goes to the background, or on a main page with nothing open. The data is written first and the same page opens again.
+   One try per version and page: if the page is still the old copy right after a try (a stale cache), it does not try again. */
+const APPVER = '29a5388a0d';
+const UPD = { to: null, last: 0, tryAt: 0, block: false, on: false };
+function updCheck(force) {
+  if (!UPD.on || (!force && Date.now() - UPD.last < 60e3)) return; UPD.last = Date.now();
+  navigator.serviceWorker.getRegistration().then(r => { if (r) r.update().catch(() => {}); }).catch(() => {});
+}
+const updQuiet = () => document.visibilityState === 'hidden' || (nav.length <= 1 && !CONF && !PDFQ.busy && !(document.activeElement && /^(INPUT|TEXTAREA)$/.test(document.activeElement.tagName)));
+function updMaybe() {
+  if (!UPD.to || UPD.to === APPVER || UPD.block || !booted || !updQuiet() || Date.now() - UPD.tryAt < 60e3) return;
+  UPD.tryAt = Date.now();
+  try { sessionStorage.setItem('kitchen.upd', JSON.stringify({ v: UPD.to, from: APPVER, at: Date.now() })); } catch (e) {}
+  flush(); location.reload();
+}
+function updInit() {
+  if (EDITION !== 'site' || !APPVER || !('serviceWorker' in navigator)) return;
+  UPD.on = true;
+  let t = null; try { t = JSON.parse(sessionStorage.getItem('kitchen.upd') || 'null'); sessionStorage.removeItem('kitchen.upd'); } catch (e) {}
+  if (t && t.v === APPVER && t.from !== APPVER) setTimeout(() => toast('Апп шинэчлэгдлээ', 'шинэ хувилбар'), 300);
+  else if (t && Date.now() - t.at < 120e3) UPD.block = true;
+  const SWC = navigator.serviceWorker;
+  SWC.addEventListener('message', e => { const d = e.data || {};
+    if (d.t === 'kv?') { try { if (e.source) e.source.postMessage({ t: 'kv', v: APPVER }); } catch (x) {} if (d.v) { UPD.to = d.v; updMaybe(); } } });
+  SWC.addEventListener('controllerchange', () => { if (SWC.controller) SWC.controller.postMessage({ t: 'ver?' }); });
+  if (SWC.startMessages) SWC.startMessages();
+  if (SWC.controller) SWC.controller.postMessage({ t: 'ver?' });   // opened from an older saved copy: finds out at once
+  setTimeout(() => updCheck(true), 4000);
+  setInterval(() => { if (document.visibilityState === 'visible' && Date.now() - UPD.last >= 30 * 60e3) updCheck(true); updMaybe(); }, 15000);
+}
+
 /* ---------------------------------------------------------------- boot */
 let saveTimer;
 let soonData = false;
@@ -3927,7 +3962,7 @@ async function boot() {
     if (nav.length > 1) { back(); save(false); }
   });
   window.addEventListener('storage', e => { if ((e.key === curKey() || e.key === UKEY(curKey())) && e.newValue && !DIRTY) readSlot(curKey()).then(() => { if (load()) draw(); }); });
-  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') flush(); else { if (freshSample()) save(); draw(); } });
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') { flush(); updMaybe(); } else { if (freshSample()) save(); draw(); updCheck(); } });
   window.addEventListener('pagehide', flush);
   window.addEventListener('focus', () => { const f = freshSample(); if (f) save(); if (f || today() !== lastDrawDay) draw(); });
   setInterval(tickTimers, 15000);
@@ -3935,6 +3970,7 @@ async function boot() {
   initDownloads();
   booted = true;
   draw();
+  updInit();
   if (EDITION === 'site') {
     /* the list is read at start, when the app comes back to the screen, every 20 s while waiting and every 10 minutes while open */
     const soon = ms => { if (document.visibilityState === 'visible' && Date.now() - accTry >= ms) { accTry = Date.now(); accCheck(); } };
@@ -3968,11 +4004,11 @@ function fromExport(o) {
 if (EDITION === 'engine') window.__kitchenEngine = { fromExport, parseImport, site: SITE };
 else {
   window.__app = { pdf: () => PDFQ, pdfBytes, genSample, dashData, mode: () => MODE, pageCode: () => PAGE, recov: () => RECOV.slice(), conf: () => CONF && CONF.title, state: () => S, nav: () => nav, A, P, save, load, exportObj, parseImport, ST, DL, fromExport,
-    r4: { stockPlan, nextDishDay, pubData, pubTrace, pubChecks, fcat, dcat, FC, DC, LI, PROD, DISHES, STAFF, menuOf, batchesOn, stockOn, planOf } };
+    ver: APPVER, upd: () => UPD, r4: { stockPlan, nextDishDay, pubData, pubTrace, pubChecks, fcat, dcat, FC, DC, LI, PROD, DISHES, STAFF, menuOf, batchesOn, stockOn, planOf } };
   document.addEventListener('DOMContentLoaded', boot);
 }
 })();
 </script>
-<script>if('serviceWorker' in navigator && (location.protocol==='https:'||location.hostname==='localhost')){window.addEventListener('load',function(){navigator.serviceWorker.register('sw.js').catch(function(){});});}</script>
+<script>if('serviceWorker' in navigator && (location.protocol==='https:'||location.hostname==='localhost')){window.addEventListener('load',function(){navigator.serviceWorker.register('sw.js',{updateViaCache:'none'}).catch(function(){});});}</script>
 </body>
 </html>
